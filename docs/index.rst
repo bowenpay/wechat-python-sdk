@@ -13,6 +13,12 @@
   * 主动对指定用户发送图片消息
   * 主动对指定用户发送语音消息
   * 主动对指定用户发送视频消息
+  * oauth2 一步网页授权获取用户基本信息
+  * oauth2 生成获取用户信息的url
+  * oauth2 通过code换取网页授权access_token
+  * oauth2 刷新access_token
+  * oauth2 拉取用户信息
+  * oauth2 检验授权凭证（oauth2 access_token）是否有效
   * 获取指定用户的个人信息
   * 获取用户列表
   * 获取分组列表
