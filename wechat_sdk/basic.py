@@ -5,6 +5,7 @@ import requests
 import time
 import json
 import cgi
+import urllib
 from StringIO import StringIO
 
 from xml.dom import minidom
@@ -519,6 +520,125 @@ class WechatBasic(object):
             data={
                 'openid': user_id,
                 'to_groupid': group_id,
+            }
+        )
+
+    def get_oauth2_userinfo_one_step(self, code):
+        """
+        一步网页授权获取用户基本信息
+        详情请参考 http://mp.weixin.qq.com/wiki/17/c0f37d5704f0b64713d5d2c37b468d75.html
+        :param code: 通过oauth2 authorize获取的code
+        :return: JSON 数据包，包含用户的基本信息
+        :raises: HTTPError: 微信api http 请求失败
+                 OfficialAPIError: 获取信息api出错
+        """
+        access_token_data = self.get_oauth2_access_token(code)
+        if access_token_data.get('errcode', None):
+            raise OfficialAPIError('oauth2 获取access_token失败。 %s' % access_token_data)
+        user_info = self.get_oauth2_userinfo(access_token_data.get('access_token'), access_token_data.get('openid'))
+        if user_info.get('errcode', None):
+            raise OfficialAPIError('oauth2 拉取用户信息失败。 %s' % user_info)
+        return user_info
+
+    def generate_oauth2_authorize_url(self, redirect_uri, response_type="code", scope="snsapi_userinfo", state=""):
+        """
+        生成获取用户信息的url
+        详情请参考 http://mp.weixin.qq.com/wiki/17/c0f37d5704f0b64713d5d2c37b468d75.html#.E7.AC.AC.E4.B8.80.E6.AD.A5.EF.BC.9A.E7.94.A8.E6.88.B7.E5.90.8C.E6.84.8F.E6.8E.88.E6.9D.83.EF.BC.8C.E8.8E.B7.E5.8F.96code
+        :param redirect_uri: 授权后重定向的回调链接地址，该方法内自动使用urlencode对链接进行处理
+        :param response_type: 返回类型，默认为code
+        :param scope: 应用授权作用域，snsapi_base （不弹出授权页面，直接跳转，只能获取用户openid），
+            snsapi_userinfo （弹出授权页面，可通过openid拿到昵称、性别、所在地。
+            并且，即使在未关注的情况下，只要用户授权，也能获取其信息）。
+            默认为snsapi_userinfo
+        :param state: 重定向后会带上state参数，开发者可以填写a-zA-Z0-9的参数值，最多128字节
+        :return: 用户授权的url链接字符串
+        """
+        redirect_uri = urllib.quote(redirect_uri)
+        url = "https://open.weixin.qq.com/connect/oauth2/authorize?appid=%s&redirect_uri=%s&response_type=%s&scope=%s&state=%s#wechat_redirect" % (
+            self.__appid,
+            redirect_uri,
+            response_type,
+            scope,
+            state
+        )
+        return url
+
+    def get_oauth2_access_token(self, code, grant_type="authorization_code"):
+        """
+        通过code换取网页授权access_token
+        详情请参考 http://mp.weixin.qq.com/wiki/17/c0f37d5704f0b64713d5d2c37b468d75.html#.E7.AC.AC.E4.BA.8C.E6.AD.A5.EF.BC.9A.E9.80.9A.E8.BF.87code.E6.8D.A2.E5.8F.96.E7.BD.91.E9.A1.B5.E6.8E.88.E6.9D.83access_token
+        :param code: 通过oauth2 authorize获取的code
+        :param grant_type: 授权类型，默认为authorization_code
+        :return: 返回的 JSON 数据包
+        :raise HTTPError: 微信api http 请求失败
+        """
+        self._check_appid_appsecret()
+
+        return self._get(
+            url='https://api.weixin.qq.com/sns/oauth2/access_token',
+            params={
+                'appid': self.__appid,
+                'secret': self.__appsecret,
+                'code': code,
+                'grant_type': grant_type
+            }
+        )
+
+    def refresh_oauth2_access_token(self, code, grant_type="authorization_code"):
+        """
+        刷新access_token（如果需要）
+        详情请参考 http://mp.weixin.qq.com/wiki/17/c0f37d5704f0b64713d5d2c37b468d75.html#.E7.AC.AC.E4.B8.89.E6.AD.A5.EF.BC.9A.E5.88.B7.E6.96.B0access_token.EF.BC.88.E5.A6.82.E6.9E.9C.E9.9C.80.E8.A6.81.EF.BC.89
+        :param code: 通过oauth2 authorize获取的code
+        :param grant_type: 授权类型，默认为authorization_code
+        :return: 返回的 JSON 数据包
+        :raise HTTPError: 微信api http 请求失败
+        """
+        self._check_appid_appsecret()
+
+        return self._get(
+            url='https://api.weixin.qq.com/sns/oauth2/access_token',
+            params={
+                'appid': self.__appid,
+                'secret': self.__appsecret,
+                'code': code,
+                'grant_type': grant_type
+            }
+        )
+
+
+    def get_oauth2_userinfo(self, access_token, user_id, lang='zh_CN'):
+        """
+        拉取用户信息(需scope为 snsapi_userinfo)
+        详情请参考 http://mp.weixin.qq.com/wiki/17/c0f37d5704f0b64713d5d2c37b468d75.html#.E7.AC.AC.E5.9B.9B.E6.AD.A5.EF.BC.9A.E6.8B.89.E5.8F.96.E7.94.A8.E6.88.B7.E4.BF.A1.E6.81.AF.28.E9.9C.80scope.E4.B8.BA_snsapi_userinfo.29
+        :param access_token: 网页授权接口调用凭证,注意：此access_token与基础支持的access_token不同
+        :param user_id: 用户的唯一标识
+        :param lang: 返回国家地区语言版本，zh_CN 简体，zh_TW 繁体，en 英语
+        :return: 返回的 JSON 数据包
+        :raise HTTPError: 微信api http 请求失败
+        """
+        return self._get(
+            url='https://api.weixin.qq.com/sns/userinfo',
+            params={
+                'access_token': access_token,
+                'openid': user_id,
+                'lang': lang,
+            }
+        )
+
+    def check_oauth2_access_token(self, access_token, user_id):
+        """
+        检验授权凭证（oauth2 access_token）是否有效
+        详情请参考 http://mp.weixin.qq.com/wiki/17/c0f37d5704f0b64713d5d2c37b468d75.html#.E9.99.84.EF.BC.9A.E6.A3.80.E9.AA.8C.E6.8E.88.E6.9D.83.E5.87.AD.E8.AF.81.EF.BC.88access_token.EF.BC.89.E6.98.AF.E5.90.A6.E6.9C.89.E6.95.88
+        :param access_token: 网页授权接口调用凭证,注意：此access_token与基础支持的access_token不同
+        :param user_id: 用户的唯一标识
+        :return: 返回的 JSON 数据包
+        :raise HTTPError: 微信api http 请求失败
+        """
+        return self._get(
+            url='https://api.weixin.qq.com/sns/auth',
+            params={
+                'access_token': access_token,
+                'openid': user_id
             }
         )
 
