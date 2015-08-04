@@ -25,8 +25,10 @@ class WechatBasic(object):
     仅包含官方 API 中所包含的内容, 如需高级功能支持请移步 ext.py 中的 WechatExt 类
     """
     def __init__(self, token=None, appid=None, appsecret=None, partnerid=None,
-                 partnerkey=None, paysignkey=None, notify_url='', access_token=None, access_token_expires_at=None,
-                 jsapi_ticket=None, jsapi_ticket_expires_at=None, checkssl=False):
+                 partnerkey=None, paysignkey=None, notify_url='',
+                 access_token=None, access_token_expires_at=None, get_access_token=None, set_access_token=None,
+                 jsapi_ticket=None, jsapi_ticket_expires_at=None, get_jsapi_ticket=None, set_jsapi_ticket=None,
+                 checkssl=False):
         """
         :param token: 微信 Token
         :param appid: App ID
@@ -37,8 +39,12 @@ class WechatBasic(object):
         :param notify_url: 微信支付成功回调url, 支付权限专用
         :param access_token: 直接导入的 access_token 值, 该值需要在上一次该类实例化之后手动进行缓存并在此处传入, 如果不传入, 将会在需要时自动重新获取
         :param access_token_expires_at: 直接导入的 access_token 的过期日期，该值需要在上一次该类实例化之后手动进行缓存并在此处传入, 如果不传入, 将会在需要时自动重新获取
+        :param get_access_token: 获取access_token的方法
+        :param set_access_token: 设置access_token的方法
         :param jsapi_ticket: 直接导入的 jsapi_ticket 值, 该值需要在上一次该类实例化之后手动进行缓存并在此处传入, 如果不传入, 将会在需要时自动重新获取
         :param jsapi_ticket_expires_at: 直接导入的 jsapi_ticket 的过期日期，该值需要在上一次该类实例化之后手动进行缓存并在此处传入, 如果不传入, 将会在需要时自动重新获取
+        :param get_jsapi_ticket: 获取jsapi_ticket的方法
+        :param set_jsapi_ticket: 设置jsapi_ticket的方法
         :param checkssl: 是否检查 SSL, 默认为 False, 可避免 urllib3 的 InsecurePlatformWarning 警告
         """
         if not checkssl:
@@ -52,10 +58,30 @@ class WechatBasic(object):
         self.__paysignkey = paysignkey
         self.__notify_url = notify_url
 
+        def default_get_access_token():
+            return self.__access_token, self.__access_token_expires_at
+
+        def default_set_access_token(access_token, access_token_expires_at):
+            self.__access_token = access_token
+            self.__access_token_expires_at = access_token_expires_at
+
         self.__access_token = access_token
         self.__access_token_expires_at = access_token_expires_at
+        self.__get_access_token = get_access_token or default_get_access_token
+        self.__set_access_token = set_access_token or default_set_access_token
+
+        def defaul_get_jsapi_ticket():
+            return self.__jsapi_ticket, self.__jsapi_ticket_expires_at
+
+        def default_set_jsapi_ticket(jsapi_ticket, jsapi_ticket_expires_at):
+            self.__jsapi_ticket = jsapi_ticket
+            self.__jsapi_ticket_expires_at = jsapi_ticket_expires_at
+
         self.__jsapi_ticket = jsapi_ticket
         self.__jsapi_ticket_expires_at = jsapi_ticket_expires_at
+        self.__get_jsapi_ticket = get_jsapi_ticket or defaul_get_jsapi_ticket
+        self.__set_jsapi_ticket = set_jsapi_ticket or default_set_jsapi_ticket
+
         self.__is_parse = False
         self.__message = None
 
@@ -150,9 +176,11 @@ class WechatBasic(object):
         """
         self._check_appid_appsecret()
 
+        access_token = self.access_token
+        access_token, access_token_expires_at = self.__get_access_token()
         return {
-            'access_token': self.access_token,
-            'access_token_expires_at': self.__access_token_expires_at,
+            'access_token': access_token,
+            'access_token_expires_at': access_token_expires_at,
         }
 
     def get_jsapi_ticket(self):
@@ -162,9 +190,11 @@ class WechatBasic(object):
         """
         self._check_appid_appsecret()
 
+        jsapi_ticket = self.jsapi_ticket
+        jsapi_ticket, jsapi_ticket_expires_at = self.__get_jsapi_ticket()
         return {
-            'jsapi_ticket': self.jsapi_ticket,
-            'jsapi_ticket_expires_at': self.__jsapi_ticket_expires_at,
+            'jsapi_ticket': jsapi_ticket,
+            'jsapi_ticket_expires_at': jsapi_ticket_expires_at,
         }
 
     def response_text(self, content, escape=False):
@@ -276,8 +306,9 @@ class WechatBasic(object):
             }
         )
         if override:
-            self.__access_token = response_json['access_token']
-            self.__access_token_expires_at = int(time.time()) + response_json['expires_in']
+            access_token = response_json['access_token']
+            access_token_expires_at = int(time.time()) + response_json['expires_in']
+            self.__set_access_token(access_token, access_token_expires_at)
         return response_json
 
     def grant_jsapi_ticket(self, override=True):
@@ -300,8 +331,9 @@ class WechatBasic(object):
             }
         )
         if override:
-            self.__jsapi_ticket = response_json['ticket']
-            self.__jsapi_ticket_expires_at = int(time.time()) + response_json['expires_in']
+            jsapi_ticket = response_json['ticket']
+            jsapi_ticket_expires_at = int(time.time()) + response_json['expires_in']
+            self.__set_jsapi_ticket(jsapi_ticket, jsapi_ticket_expires_at)
         return response_json
 
     def create_menu(self, menu_data):
@@ -1089,23 +1121,27 @@ class WechatBasic(object):
     def access_token(self):
         self._check_appid_appsecret()
 
-        if self.__access_token:
+        access_token, access_token_expires_at = self.__get_access_token()
+        if access_token:
             now = time.time()
-            if self.__access_token_expires_at - now > 60:
-                return self.__access_token
+            if access_token_expires_at - now > 60:
+                return access_token
         self.grant_token()
-        return self.__access_token
+        access_token, access_token_expires_at = self.__get_access_token()
+        return access_token
 
     @property
     def jsapi_ticket(self):
         self._check_appid_appsecret()
 
-        if self.__jsapi_ticket:
+        jsapi_ticket, jsapi_ticket_expires_at = self.__get_jsapi_ticket()
+        if jsapi_ticket:
             now = time.time()
-            if self.__jsapi_ticket_expires_at - now > 60:
-                return self.__jsapi_ticket
+            if jsapi_ticket_expires_at - now > 60:
+                return jsapi_ticket
         self.grant_jsapi_ticket()
-        return self.__jsapi_ticket
+        jsapi_ticket, jsapi_ticket_expires_at = self.__get_jsapi_ticket()
+        return jsapi_ticket
 
     def _check_token(self):
         """
