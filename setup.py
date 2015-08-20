@@ -4,16 +4,16 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='wechat-sdk',
-    version='0.5.8',
+    name='wechat-python-sdk',
+    version='0.6.0',
     keywords=('wechat', 'sdk', 'wechat sdk'),
     description=u'微信公众平台Python开发包',
     long_description=open("README.rst").read(),
     license='BSD License',
 
-    url='https://github.com/doraemonext/wechat-python-sdk',
-    author='doraemonext',
-    author_email='doraemonext@gmail.com',
+    url='https://github.com/bowenpay/wechat-python-sdk',
+    author='doraemonext jingpingyi',
+    author_email='doraemonext@gmail.com, jingping.yi@gmail.com',
 
     packages=find_packages(),
     include_package_data=True,
