@@ -1060,10 +1060,11 @@ class WechatBasic(object):
             str += chars[random.randint(0, length)]
         return str
 
-    def dict_to_xml(params):
+    def dict_to_xml(self, params):
         xml_elements = ["<xml>",]
         for (k, v) in params.items():
-            if str(v).isdigit():
+            v2 = v.encode("utf-8") if isinstance(v, unicode) else v
+            if str(v2).isdigit():
                 xml_elements.append('<%s>%s</%s>' % (k, v, k))
             else:
                 xml_elements.append('<%s><![CDATA[%s]]></%s>' % (k, v, k))
