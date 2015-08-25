@@ -1200,7 +1200,9 @@ class WechatBasic(object):
             **kwargs
         )
         r.raise_for_status()
+        r.encoding = "utf-8"
         response_json = r.json()
+
         self._check_official_error(response_json)
         return response_json
 
